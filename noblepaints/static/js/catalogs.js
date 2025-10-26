@@ -1,55 +1,78 @@
-document.querySelector('.overlay').classList.add('hidden')
-document.querySelector('.overlay').style.display = 'none'
-document.querySelectorAll('.check-wrap').forEach(e=>{
-    document.querySelectorAll('.check-wrap').forEach(e=>{
-        e.classList.remove('checked')
-    })
-    e.addEventListener('click',function(){
-        document.querySelectorAll('.check-wrap').forEach(e=>{
-            e.classList.remove('checked')
-        })
-        e.classList.add('checked')
-        document.querySelector('.overlay').style=''
-    document.querySelector('.overlay').classList.remove('loaded')
-        location.href = `/catalogs/?category=${e.parentElement.querySelector('label').getAttribute('name')}&page=1&search=${getParams('search')}&country=${getParams('country')}&lang=${localStorage.getItem('nobleLang')}`
-    })
+document.addEventListener('DOMContentLoaded', () => {
+  const filtersForm = document.getElementById('catalogFilters');
+  if (!filtersForm) {
+    return;
+  }
+
+  const langInput = document.getElementById('langInput');
+  const pageInput = document.getElementById('pageInput');
+  const langButtons = filtersForm.querySelectorAll('.lang-btn');
+  const autoSubmitElements = filtersForm.querySelectorAll('[data-auto-submit]');
+  const submitButton = document.getElementById('filterSubmit');
+
+  const currentLang = (langInput && langInput.value) ? langInput.value : 'en';
+  const storedLang = localStorage.getItem('nobleLang') || currentLang;
+
+  const activateLangButton = (lang) => {
+    langButtons.forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.lang === lang);
+    });
+  };
+
+  const setLanguage = (lang, submitAfterChange = false) => {
+    if (!langInput) {
+      return;
+    }
+    langInput.value = lang;
+    localStorage.setItem('nobleLang', lang);
+    activateLangButton(lang);
+
+    if (submitAfterChange && filtersForm) {
+      if (pageInput) {
+        pageInput.value = 1;
+      }
+      filtersForm.submit();
+    }
+  };
+
+  // Align UI with stored language preference
+  if (storedLang !== currentLang) {
+    setLanguage(storedLang, true);
+    return; // form submit will reload page with correct language
+  } else {
+    setLanguage(currentLang);
+  }
+
+  langButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.lang;
+      if (!lang || (langInput && lang === langInput.value)) {
+        return;
+      }
+      setLanguage(lang, true);
+    });
+  });
+
+  autoSubmitElements.forEach((element) => {
+    element.addEventListener('change', () => {
+      if (pageInput) {
+        pageInput.value = 1;
+      }
+      filtersForm.submit();
+    });
+  });
+
+  if (submitButton) {
+    submitButton.addEventListener('click', () => {
+      if (pageInput) {
+        pageInput.value = 1;
+      }
+    });
+  }
+
+  filtersForm.addEventListener('submit', () => {
+    if (langInput && !langInput.value) {
+      langInput.value = 'en';
+    }
+  });
 });
-
-[...document.querySelectorAll('.radio-wrap')].filter((e,i)=>e.getAttribute('lang')==localStorage.getItem('nobleLang')&&i>0).forEach(e=>{
-    e.classList.remove('hidden')
-});
-
-if(!getParams('category'))
-    [...document.querySelectorAll('.check-wrap')][0].classList.add('checked');
-else
-[...document.querySelectorAll('.check-wrap')].filter(e=>!e.parentElement.classList.contains('hidden')&&e.parentElement.querySelector('label').getAttribute('name')==getParams('category'))[0]?.classList.add('checked');
-
-Searchbtn.addEventListener('click',function(evt){
-    evt.preventDefault()
-    document.querySelector('.overlay').style=''
-    document.querySelector('.overlay').classList.remove('loaded')
-    location.href = `/catalogs/?category=${getParams('category')}&page=${getParams('page')}&search=${this.previousElementSibling.value}&country=${getParams('country')}&lang=${localStorage.getItem('nobleLang')}`
-})
-
-selectCountries.addEventListener('change',function(evt){
-    evt.preventDefault()
-    document.querySelector('.overlay').style=''
-    document.querySelector('.overlay').classList.remove('loaded')
-    location.href = `/catalogs/?category=${getParams('category')}&page=${getParams('page')}&search=${getParams('search')}&country=${this.value}&lang=${localStorage.getItem('nobleLang')}`
-})
-
-function getParams(query){
-    const params = new Proxy(new URLSearchParams(window.location.search), {
-        get: (searchParams, prop) => searchParams.get(prop),
-      });
-      // Get the value of "some_key" in eg "https://example.com/?some_key=some_value"
-      return params[query];
-}
-
-
-
-
-if(localStorage.getItem('nobleLang') == 'ar')
-[...document.querySelectorAll('.radio-wrap')][0].querySelector('label').innerHTML = 'الكل'
-else
-[...document.querySelectorAll('.radio-wrap')][0].querySelector('label').innerHTML = 'All';

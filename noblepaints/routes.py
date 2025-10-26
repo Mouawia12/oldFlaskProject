@@ -11,6 +11,7 @@ from flask import render_template,request,jsonify,send_from_directory,redirect,u
 from noblepaints.models import Category,Product,Catalog,TechnicalDatasheet,Post,Certificate,Approval,ProductSchema,Upload,SocialSchema,Social
 from sqlalchemy import desc
 from functools import lru_cache
+from urllib.parse import urlencode
 from flask_httpauth import HTTPBasicAuth
 from flask_mail import Message
 
@@ -29,6 +30,71 @@ with app.app_context():
         print("Database indexes created/verified for better performance")
     except Exception as e:
         print(f"Note: Could not create indexes (may already exist): {e}")
+
+    # Seed default approvals logos if none exist to keep legacy content visible
+    try:
+        if db.session.query(Approval).count() == 0:
+            default_approvals = [
+                {'title': 'Noble Paints Logo', 'img': '/static/images/logo1.png'},
+                {'title': 'Zamil Group', 'img': '/static/images/24b0ee83-fea6-44ad-9ed4-1a2bb3543c9d.png'},
+                {'title': 'Royal Commission', 'img': '/static/images/65793.jpg'},
+                {'title': 'IQT Hub', 'img': '/static/images/IQT__HUB_400x4001.png'},
+                {'title': 'Ministry of Housing', 'img': '/static/images/--.png'},
+                {'title': 'Saudi Railways', 'img': '/static/images/Client-logo-14-.png'},
+                {'title': 'SABIC', 'img': '/static/images/Logo_of_Sabic.svg.png'},
+                {'title': 'Ministry of Health', 'img': '/static/images/images.jpg'},
+            ]
+            for item in default_approvals:
+                db.session.add(Approval(
+                    title=item['title'],
+                    description='',
+                    img=item['img'],
+                    link=''
+                ))
+            db.session.commit()
+            print("Seeded default approvals data")
+    except Exception as seed_error:
+        print(f"Could not seed default approvals: {seed_error}")
+    # Seed default certificates images if none exist
+    try:
+        if db.session.query(Certificate).count() == 0:
+            default_certificates = [
+                '/static/images/Screenshot41.png',
+                '/static/images/Screenshot42.png',
+                '/static/images/Screenshot43.png',
+                '/static/images/Screenshot44.png',
+                '/static/images/Screenshot45.png',
+                '/static/images/Screenshot46.png',
+                '/static/images/Screenshot47.png',
+                '/static/images/Screenshot48.png',
+                '/static/images/Screenshot49.png',
+                '/static/images/Screenshot50.png',
+                '/static/images/Screenshot51.png',
+                '/static/images/Screenshot52.png',
+                '/static/images/Screenshot53.png',
+                '/static/images/Screenshot54.png',
+                '/static/images/Screenshot55.png',
+                '/static/images/Screenshot56.png',
+                '/static/images/Screenshot57.png',
+                '/static/images/Screenshot58.png',
+                '/static/images/Screenshot59.png',
+                '/static/images/Screenshot60.png',
+                '/static/images/Screenshot61.png',
+                '/static/images/Screenshot62.png',
+                '/static/images/Screenshot63.png',
+                '/static/images/Screenshot64.png',
+            ]
+            for path in default_certificates:
+                db.session.add(Certificate(
+                    title='',
+                    description='',
+                    img=path,
+                    link=''
+                ))
+            db.session.commit()
+            print("Seeded default certificates data")
+    except Exception as cert_seed_error:
+        print(f"Could not seed default certificates: {cert_seed_error}")
 
 # Cache will be pre-warmed after function definitions
 
@@ -138,7 +204,7 @@ def locations_page():
 
 @app.route('/colors/')
 def colors_page():  
-        return render_template('colors.html')
+        return render_template('colors.html', template='colors')
 
 @app.route('/contact/')
 def contact_page():  
@@ -308,33 +374,63 @@ def news_page():
 
 @app.route('/certificates/')
 def certificates_page():  
-    page = request.args.get('page')
-    type = request.args.get('type') 
-    if(page !='' and page !='undefined' and page != None):
-        if(type !='' and type !='undefined' and type != None):
-            return render_template('certificates.html',certificates = db.session.query(Certificate).filter(Certificate.type==type),page=page,type=type)
-        else:
-            return render_template('certificates.html',certificates = db.session.query(Certificate).all(),page=page,type=type)
-    else:
-        if(type !='' and type !='undefined' and type != None):
-            return render_template('certificates.html',certificates = db.session.query(Certificate).filter(Certificate.type==type),page='1',type=type)
-        else:
-            return render_template('certificates.html',certificates = db.session.query(Certificate).all(),page='1',type=type)
+    try:
+        lang = (request.args.get('lang') or session.get('certificates_lang') or 'en').lower()
+        if lang not in {'en', 'ar'}:
+            lang = 'en'
+        session['certificates_lang'] = lang
+
+        items = db.session.query(Certificate).order_by(desc(Certificate.id)).all()
+
+        certificate_cards = []
+        for item in items:
+            certificate_cards.append({
+                'id': item.id,
+                'title': item.title or '',
+                'description': item.description or '',
+                'image_url': item.img or '/static/images/default.png',
+                'link': item.link or ''
+            })
+
+        return render_template(
+            'certificates.html',
+            items=certificate_cards,
+            lang=lang,
+            template='certificates'
+        )
+    except Exception as e:
+        print(f"Error in certificates page: {e}")
+        return "Internal server error in certificates page", 500
 
 @app.route('/approvals/')
 def approvals_page():  
-    page = request.args.get('page')
-    type = request.args.get('type') 
-    if(page !='' and page !='undefined' and page != None):
-        if(type !='' and type !='undefined' and type != None):
-            return render_template('approvals.html',approvals = db.session.query(Certificate).filter(Certificate.type==type),page=page,type=type)
-        else:
-            return render_template('approvals.html',approvals = db.session.query(Certificate).all(),page=page,type=type)
-    else:
-        if(type !='' and type !='undefined' and type != None):
-            return render_template('approvals.html',approvals = db.session.query(Certificate).filter(Certificate.type==type),page='1',type=type)
-        else:
-            return render_template('approvals.html',approvals = db.session.query(Certificate).all(),page='1',type=type)
+    try:
+        lang = (request.args.get('lang') or session.get('approvals_lang') or 'en').lower()
+        if lang not in {'en', 'ar'}:
+            lang = 'en'
+        session['approvals_lang'] = lang
+
+        items = db.session.query(Approval).order_by(desc(Approval.id)).all()
+
+        approval_cards = []
+        for item in items:
+            approval_cards.append({
+                'id': item.id,
+                'title': item.title or '',
+                'description': item.description or '',
+                'image_url': item.img or '/static/images/default.png',
+                'link': item.link or ''
+            })
+
+        return render_template(
+            'approvals.html',
+            items=approval_cards,
+            lang=lang,
+            template='approvals'
+        )
+    except Exception as e:
+        print(f"Error in approvals page: {e}")
+        return "Internal server error in approvals page", 500
 
 @app.route('/news/<id>/')
 def news_page_details(id):  
@@ -545,76 +641,116 @@ def productsSearch_page_filter_none():
 @app.route('/catalogs/')
 def catalogs_page_filter_none():  
     try:
-        # Get filter parameters with proper defaults and validation
+        # Resolve filters with sane defaults
+        lang = (request.args.get('lang') or session.get('preferred_lang') or 'en').lower()
+        if lang not in {'en', 'ar'}:
+            lang = 'en'
+        session['preferred_lang'] = lang
+
         cat = request.args.get('category', 'All')
-        search = request.args.get('search', '').strip()
+        search = (request.args.get('search') or '').strip()
         country = request.args.get('country', 'All')
-        lang = 'en'
-        
-        # Handle page parameter safely
+
         try:
-            page = int(request.args.get('page', 1))
-            if page < 1:
-                page = 1
+            page = max(int(request.args.get('page', 1)), 1)
         except (ValueError, TypeError):
             page = 1
-        
-        # Build base query
-        query = db.session.query(Catalog).filter(Catalog.lang == lang)
-        
-        # Apply filters conditionally
-        if cat and cat != 'All' and cat != 'null':
-            query = query.filter(Catalog.category == cat)
-        
-        if country and country != 'All' and country != 'null':
-            query = query.filter(Catalog.country == country)
-            
-        if search:
-            query = query.filter(Catalog.name.contains(search.lower()))
-        
-        # Get total count for pagination
-        total_items = query.count()
-        
-        # Apply pagination - only get items for current page
+
         items_per_page = 12
+
+        query = db.session.query(Catalog).filter(Catalog.lang == lang)
+
+        if cat and cat not in {'All', 'null', 'None'}:
+            query = query.filter(Catalog.category == str(cat))
+
+        if country and country not in {'All', 'null', 'None'}:
+            query = query.filter(Catalog.country == country)
+
+        if search:
+            query = query.filter(Catalog.name.ilike(f'%{search}%'))
+
+        total_items = query.count()
         offset = (page - 1) * items_per_page
-        items = query.offset(offset).limit(items_per_page).all()
-        
-        # Get categories once
-        categories = db.session.query(Category).all()
-        
-        return render_template('catalogs.html',
-            items=items,
+        items = query.order_by(desc(Catalog.id)).offset(offset).limit(items_per_page).all()
+
+        categories = db.session.query(Category).order_by(Category.id).all()
+        category_map = {str(c.id): c for c in categories}
+
+        upload_ids = {
+            str(item.link)
+            for item in items
+            if item.link and str(item.link).isdigit()
+        }
+        uploads = {}
+        if upload_ids:
+            uploads = {
+                str(u.id): u
+                for u in db.session.query(Upload).filter(Upload.id.in_(upload_ids)).all()
+            }
+
+        catalog_cards = []
+        for item in items:
+            link_value = item.link or ''
+            download_url = None
+            download_label = None
+            if link_value:
+                if str(link_value).isdigit() and str(link_value) in uploads:
+                    download_url = url_for('download', upload_id=link_value)
+                    download_label = uploads[str(link_value)].filename or item.name
+                else:
+                    download_url = link_value
+                    download_label = item.name
+
+            category_obj = category_map.get(str(item.category)) if item.category is not None else None
+
+            catalog_cards.append({
+                'id': item.id,
+                'name': item.name or 'Untitled catalog',
+                'image_url': item.img or '/static/images/default-catalog.jpg',
+                'category_id': str(item.category) if item.category is not None else '',
+                'category_name': category_obj.name if category_obj else (item.category or 'Uncategorized'),
+                'country': item.country or 'All',
+                'lang': item.lang,
+                'download_url': download_url,
+                'download_label': download_label,
+            })
+
+        distinct_countries = {
+            value for (value,) in db.session.query(Catalog.country)
+            .filter(Catalog.lang == lang).filter(Catalog.country.isnot(None)).distinct().all()
+            if value
+        }
+        country_options = ['All'] + sorted(distinct_countries - {'All'}) if distinct_countries else ['All']
+
+        total_pages = max((total_items + items_per_page - 1) // items_per_page, 1)
+
+        base_params = {
+            'category': cat or 'All',
+            'search': search,
+            'country': country or 'All',
+            'lang': lang
+        }
+        query_without_page = urlencode(base_params)
+
+        return render_template(
+            'catalogs.html',
+            items=catalog_cards,
             total_items=total_items,
-            page=str(page),
+            page=page,
+            total_pages=total_pages,
             category=cat,
             search=search,
             country=country,
+            lang=lang,
             categories=categories,
+            country_options=country_options,
             template='catalogs',
-            items_per_page=items_per_page
+            items_per_page=items_per_page,
+            query_without_page=query_without_page
         )
     except Exception as e:
-        # Fallback to basic functionality if something goes wrong
         print(f"Error in catalogs route: {e}")
-        try:
-            # Simple fallback query
-            items = db.session.query(Catalog).filter(Catalog.lang == 'en').limit(12).all()
-            categories = db.session.query(Category).all()
-            return render_template('catalogs.html',
-                items=items,
-                total_items=len(items),
-                page="1",
-                category="All", 
-                search="",
-                country="All",
-                categories=categories,
-                template='catalogs',
-                items_per_page=12
-            )
-        except Exception as fallback_error:
-            print(f"Fallback error: {fallback_error}")
-            return "Internal server error in catalogs page", 500
+        return "Internal server error in catalogs page", 500
 
 
 @app.route('/TechnicalDatasheets/')
@@ -666,7 +802,8 @@ def TechnicalDatasheets_page_filter_none():
             search=search,
             country=country,
             categories=categories,
-            items_per_page=items_per_page
+            items_per_page=items_per_page,
+            template='technical'
         )
     except Exception as e:
         # Fallback to basic functionality if something goes wrong
@@ -683,7 +820,8 @@ def TechnicalDatasheets_page_filter_none():
                 search="",
                 country="All",
                 categories=categories,
-                items_per_page=12
+                items_per_page=12,
+                template='technical'
             )
         except Exception as fallback_error:
             print(f"TechnicalDatasheets fallback error: {fallback_error}")
@@ -858,10 +996,25 @@ def certificates_del(id):
 def cpanel_approvals():
     page = request.args.get('page')
     show = request.args.get('show')
-    if show:
-        return render_template('cpanel_approvals.html',approvals = db.session.query(Approval).all(),page=page,show=show)
-    else:
-        return render_template('cpanel_approvals.html',approvals = db.session.query(Approval).all(),page=page,show='10')
+    lang = request.args.get('lang', session.get('preferred_admin_lang', 'en')).lower()
+    if lang not in {'en', 'ar'}:
+        lang = 'en'
+    session['preferred_admin_lang'] = lang
+
+    approvals_query = db.session.query(Approval).order_by(desc(Approval.id))
+
+    if not page:
+        page = '1'
+    if not show:
+        show = '10'
+
+    return render_template(
+        'cpanel_approvals.html',
+        approvals=approvals_query.all(),
+        page=page,
+        show=show,
+        lang=lang
+    )
 
 
 @app.route('/ControlPanel/approvals/add/',methods=['POST','GET'])
@@ -999,12 +1152,27 @@ def products_del(id):
 def cpanel_catalogs():
     page = request.args.get('page')
     show = request.args.get('show')
-    #lang = request.args.get('lang')
-    lang = 'en'
-    if show:
-        return render_template('cpanel_catalogs.html',catalogs = db.session.query(Catalog).filter(Catalog.lang==lang).all(),page=page,show=show,categories = db.session.query(Category).all(),)
-    else:
-        return render_template('cpanel_catalogs.html',catalogs = db.session.query(Catalog).filter(Catalog.lang==lang).all(),page=page,show='10',categories = db.session.query(Category).all(),)
+    lang = request.args.get('lang', session.get('preferred_admin_lang', 'en')).lower()
+    if lang not in {'en', 'ar'}:
+        lang = 'en'
+    session['preferred_admin_lang'] = lang
+
+    catalogs_query = db.session.query(Catalog).filter(Catalog.lang == lang).order_by(desc(Catalog.id))
+    categories = db.session.query(Category).order_by(Category.id).all()
+
+    if not page:
+        page = '1'
+    if not show:
+        show = '10'
+
+    return render_template(
+        'cpanel_catalogs.html',
+        catalogs=catalogs_query.all(),
+        page=page,
+        show=show,
+        categories=categories,
+        lang=lang
+    )
 
 
 @app.route('/ControlPanel/catalogs/add/',methods=['POST','GET'])
@@ -1013,15 +1181,26 @@ def catalogs_add():
     data = json.loads(request.form['data'])
     name = data['name']
     img = data['img']
-    link = request.files['file']
     category = data['category']
     lang = data['lang']
     country = data['country']
-    upload = Upload(filename=link.filename, data=link.read())
-    db.session.add(upload)
-    db.session.commit()
-    s1 = Catalog(name=name,img=img,link=upload.id,category=category,country=country,lang=lang)
-    db.session.add(s1)
+    upload_file = request.files.get('file')
+
+    upload = None
+    if upload_file and upload_file.filename:
+        upload = Upload(filename=upload_file.filename, data=upload_file.read())
+        db.session.add(upload)
+        db.session.flush()
+
+    catalog = Catalog(
+        name=name,
+        img=img,
+        link=str(upload.id) if upload else None,
+        category=category,
+        country=country,
+        lang=lang
+    )
+    db.session.add(catalog)
     db.session.commit()
     return 'True'
 
@@ -1036,18 +1215,23 @@ def catalogs_edit(id):
     lang = data['lang']
     country = data['country']
     query = db.session.query(Catalog).filter(Catalog.id==id).first()
-    if request.files:
-        link = request.files['file']
-        if link!='' and link!=None and link!='undefined':
-            upload = db.session.query(Upload).filter(Upload.id==query.link).first()
-            if upload:
-                upload.filename = link.filename
-                upload.data = link.read()
-            else:
-                upload = Upload(filename=link.filename, data=link.read())
-                db.session.add(upload)
-                db.session.commit()
-                query.link = upload.id
+    if not query:
+        abort(404)
+
+    upload_file = request.files.get('file')
+    if upload_file and upload_file.filename:
+        existing_upload = None
+        if query.link and str(query.link).isdigit():
+            existing_upload = db.session.query(Upload).filter(Upload.id == int(query.link)).first()
+
+        if existing_upload:
+            existing_upload.filename = upload_file.filename
+            existing_upload.data = upload_file.read()
+        else:
+            new_upload = Upload(filename=upload_file.filename, data=upload_file.read())
+            db.session.add(new_upload)
+            db.session.flush()
+            query.link = str(new_upload.id)
     if name!='' and name!=None and name!='undefined':
         query.name = name
     if category!='' and category!=None and category!='undefined':
@@ -1065,7 +1249,10 @@ def catalogs_edit(id):
 @app.route('/ControlPanel/catalogs/del/<id>/')
 @auth.login_required
 def catalogs_del(id):
-    db.session.delete(db.session.query(Catalog).filter(Catalog.id==id).first())
+    catalog = db.session.query(Catalog).filter(Catalog.id == id).first()
+    if not catalog:
+        abort(404)
+    db.session.delete(catalog)
     db.session.commit()
 
 ####################################################

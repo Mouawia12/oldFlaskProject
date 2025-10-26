@@ -52,7 +52,7 @@
 </head>
 <body>
 
-    <div class="overlay {% if template=='catalogs' or template == 'products' or template == 'cats'%}hidden{% endif %}">
+    <div class="overlay {% if template in ['catalogs','products','cats','approvals','certificates','colors','technical'] %}hidden{% endif %}">
         <div class="overlayDoor"></div>
         <div class="overlayContent">
             <div class="loader">
@@ -307,15 +307,25 @@
         </section>
       </footer>
       <script>
-        if(localStorage.getItem('nobleLang')=='ar'){
+        const navbarElement = document.getElementById('navbar');
+        const currentLang = localStorage.getItem('nobleLang');
+        if(!currentLang){
+              document.documentElement.setAttribute("lang", 'en');
+              document.dir = 'ltr';
+        }else if(currentLang !== 'ar'){
+              document.documentElement.setAttribute("lang", currentLang);
+              document.dir = 'ltr';
+        }
+
+        if(currentLang=='ar'){
               document.dir = 'rtl'
-              document.documentElement.setAttribute("lang", localStorage.getItem('nobleLang'));
+              document.documentElement.setAttribute("lang", currentLang);
               document.querySelector('body').style.textAlign = "start"
               document.querySelector('body').style.fontFamily = "'Cairo','sans-serif"
               document.querySelectorAll('.btn')?.forEach(e=>{
                 e.style.fontFamily = "'Cairo','sans-serif"
               })
-              navbar.querySelectorAll('a')?.forEach(e=>{
+              navbarElement?.querySelectorAll('a')?.forEach(e=>{
                 e.style.fontFamily = "'Cairo','sans-serif"
               })
               if(document.querySelector('header.subpage')?.querySelector('h1')){
@@ -344,14 +354,23 @@
           })
 
 
-        document.querySelectorAll('.text').forEach((e,i)=>{
-            e.innerHTML = langs[userLang][i]
-          })
+        const pageLangs = (window.langs && window.langs[userLang]) ? window.langs[userLang] : null;
+        if (pageLangs) {
+          document.querySelectorAll('.text').forEach((e,i)=>{
+            if (typeof pageLangs[i] !== 'undefined') {
+              e.innerHTML = pageLangs[i];
+            }
+          });
+        }
 
-                    
+        const navLangs = (typeof langs2 !== 'undefined' && langs2[userLang]) ? langs2[userLang] : null;
+        if (navLangs) {
           document.querySelectorAll('.text2').forEach((e,i)=>{
-            e.innerHTML = langs2[userLang][i]
-          })
+            if (typeof navLangs[i] !== 'undefined') {
+              e.innerHTML = navLangs[i];
+            }
+          });
+        }
 
           $(document).ready(function() {
 	// Will wait for everything on the page to load.
