@@ -7,6 +7,7 @@ let langs2 = {
         `RAL Colors`,
         `Catalogs`,
         `Technical Datasheets`,
+        `TechnicalDatasheets`,
         `Personal Use`,
         `Find A Product`,
         `Our Categories`,
@@ -21,12 +22,15 @@ let langs2 = {
         `CATALOGS
         <br><br>`,
         `Explore a world of paint products, textures and shades for your next personal or professional product.`,
+        `Color <br>palette`,
+        `Colors inspire creativity and give your spaces a personal touch.`,
         `SELECT`,
         `RAL <br>Colors`,
         `Find the exact color, shade and hue you want from our most popular color schemes.`,
         `SELECT`,
         `Paint<br>Calculator`,
         `Calculate how much paint you will<br>need for your project.`,
+        `Calculate how much paint you’ll<br>need for your project.`,
         `SELECT`,
         `Store <br>locator`,
         `Find an official distributor for National<br>Paints products.`,
@@ -45,6 +49,7 @@ let langs2 = {
         `ألوان الرال`,
         `الكتالوجات`,
         `المواصفات الفنية`,
+        `المواصفات الفنية`,
         `الإستخدام الشخصي`,
         `ابحث عن منتج`,
         `الأقسام`,
@@ -59,6 +64,8 @@ let langs2 = {
         `الكتالوجات
         <br><br>`,
         `اكتشف عالمًا من منتجات الطلاء والأنسجة والظلال لمنتجك الشخصي أو المهني التالي.`,
+        `لوحة <br>الألوان`,
+        `الألوان تلهم الإبداع وتمنح مساحاتك لمسة شخصية.`,
         `تصفح`,
         `ألوان <br>الرال`,
         `
@@ -66,6 +73,7 @@ let langs2 = {
         `تصفح`,
         `حاسبة<br>الدهان`,
         `احسب كمية الطلاء التي ستحتاج <br> لمشروعك.`,
+        `احسب كمية الطلاء التي ستحتاج<br>لمشروعك.`,
         `تصفح`,
         `جد أقرب <br>متجر`,
         `

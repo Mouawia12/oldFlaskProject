@@ -49,6 +49,82 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@100;200;300;400;500;600;700;800;900&family=Cairo:wght@200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      body.sidebar-open {
+        overflow: hidden;
+      }
+      .mobile-nav-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 99998;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .3s ease, visibility .3s ease;
+      }
+      body.sidebar-open .mobile-nav-backdrop {
+        opacity: 1;
+        visibility: visible;
+      }
+      .mobile-nav-close {
+        background: none;
+        border: 0;
+        color: #fff;
+        font-size: 2rem;
+        line-height: 1;
+        padding: 0;
+        margin-bottom: 1rem;
+        display: none;
+      }
+      @media (max-width: 992px) {
+        .navbar-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .navbar-collapse {
+          position: fixed;
+          top: 0;
+          right: -320px;
+          width: 280px;
+          max-width: 85%;
+          height: 100vh;
+          background: #0f2642;
+          padding: 2.5rem 1.5rem;
+          z-index: 99999;
+          overflow-y: auto;
+          transition: right .3s ease;
+        }
+        .navbar-collapse.in,
+        .navbar-collapse.show {
+          right: 0;
+        }
+        .navbar-collapse .nav {
+          flex-direction: column !important;
+          gap: 0.75rem;
+        }
+        .navbar-collapse .nav > li > a {
+          display: block;
+          font-size: 1.1rem;
+          padding: 0.5rem 0;
+          color: #fff !important;
+        }
+        .navbar-collapse .dropdown-menu {
+          position: static;
+          float: none;
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+        }
+        .navbar-collapse .dropdown-menu > li > a {
+          color: #e2e8f0 !important;
+          padding-left: 1rem;
+        }
+        .mobile-nav-close {
+          display: inline-block;
+        }
+      }
+    </style>
 </head>
 <body>
 
@@ -115,6 +191,7 @@
               </div>
       
               <div id="navbar" class="navbar-collapse collapse toLoad-show" aria-expanded="false">
+                <button type="button" class="mobile-nav-close" aria-label="Close">&times;</button>
                <img height="90px" src="/static/images/logo.png" alt="logo" onclick="location.href='/'">
                 <ul class="nav navbar-nav" style="display:flex;flex-direction: row;">
       
@@ -163,6 +240,7 @@
               </div>
             </div>
           </nav>
+    <div class="mobile-nav-backdrop"></div>
     </div>
     <script src="/static/js/languages/sec.js"></script>
     <script>
@@ -354,22 +432,62 @@
           })
 
 
-        const pageLangs = (window.langs && window.langs[userLang]) ? window.langs[userLang] : null;
-        if (pageLangs) {
-          document.querySelectorAll('.text').forEach((e,i)=>{
-            if (typeof pageLangs[i] !== 'undefined') {
-              e.innerHTML = pageLangs[i];
-            }
-          });
-        }
+        const normalizeKey = (value) => {
+          if (!value) return '';
+          return value
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/[\n\r]+/g, ' ')
+            .replace(/<br\s*\/?>/gi, '<br>')
+            .replace(/\s{2,}/g, ' ')
+            .replace(/>\s+</g, '><')
+            .trim()
+            .toLowerCase();
+        };
 
-        const navLangs = (typeof langs2 !== 'undefined' && langs2[userLang]) ? langs2[userLang] : null;
-        if (navLangs) {
-          document.querySelectorAll('.text2').forEach((e,i)=>{
-            if (typeof navLangs[i] !== 'undefined') {
-              e.innerHTML = navLangs[i];
+        const buildTranslationMap = (source, target) => {
+          const map = {};
+          if (!source || !target) {
+            return map;
+          }
+          source.forEach((text, idx) => {
+            if (typeof text === 'undefined' || typeof target[idx] === 'undefined') {
+              return;
+            }
+            const key = normalizeKey(String(text));
+            if (key) {
+              map[key] = target[idx];
             }
           });
+          return map;
+        };
+
+        const applyTranslations = (selector, map) => {
+          if (!map || Object.keys(map).length === 0) {
+            return;
+          }
+          document.querySelectorAll(selector).forEach((el) => {
+            const htmlKey = normalizeKey(el.innerHTML);
+            if (map[htmlKey]) {
+              el.innerHTML = map[htmlKey];
+              return;
+            }
+            const textKey = normalizeKey(el.textContent);
+            if (map[textKey]) {
+              el.innerHTML = map[textKey];
+            }
+          });
+        };
+
+        if (userLang !== 'en') {
+          const englishNav = (typeof langs2 !== 'undefined' && langs2['en']) ? langs2['en'] : null;
+          const targetNav = (typeof langs2 !== 'undefined' && langs2[userLang]) ? langs2[userLang] : null;
+          const navMap = buildTranslationMap(englishNav, targetNav);
+          applyTranslations('.text2', navMap);
+
+          const englishPage = (typeof langs !== 'undefined' && langs['en']) ? langs['en'] : null;
+          const targetPage = (typeof langs !== 'undefined' && langs[userLang]) ? langs[userLang] : null;
+          const pageMap = buildTranslationMap(englishPage, targetPage);
+          applyTranslations('.text', pageMap);
         }
 
           $(document).ready(function() {
@@ -411,13 +529,42 @@ async function getsocialIcons(){
 
 getsocialIcons()
 
-document.querySelector('.toLoad-show').querySelectorAll('a').forEach(e=>{
-  if(!e.classList.contains('dropdown-toggle'))
-  e.addEventListener('click',function(){
-    document.querySelector('.overlay').style=''
-    document.querySelector('.overlay').classList.remove('loaded')
+const toLoadContainer = document.querySelector('.toLoad-show');
+if (toLoadContainer){
+  toLoadContainer.querySelectorAll('a').forEach(e=>{
+    if(!e.classList.contains('dropdown-toggle'))
+    e.addEventListener('click',function(){
+      document.querySelector('.overlay').style=''
+      document.querySelector('.overlay').classList.remove('loaded')
+      if (window.innerWidth <= 992 && typeof $ !== 'undefined') {
+        $('#navbar').collapse('hide');
+      }
+    })
   })
-})
+}
+
+if (typeof $ !== 'undefined' && $('#navbar').length){
+  const $navbar = $('#navbar');
+  $navbar.on('show.bs.collapse shown.bs.collapse', function(){
+    document.body.classList.add('sidebar-open');
+  });
+  $navbar.on('hide.bs.collapse hidden.bs.collapse', function(){
+    document.body.classList.remove('sidebar-open');
+  });
+  const closeBtn = document.querySelector('.mobile-nav-close');
+  if (closeBtn){
+    closeBtn.addEventListener('click', ()=> $navbar.collapse('hide'));
+  }
+  const backdrop = document.querySelector('.mobile-nav-backdrop');
+  if (backdrop){
+    backdrop.addEventListener('click', ()=> $navbar.collapse('hide'));
+  }
+  $navbar.find('a').on('click', function(){
+    if (window.innerWidth <= 992){
+      $navbar.collapse('hide');
+    }
+  });
+}
   
           
       </script>
