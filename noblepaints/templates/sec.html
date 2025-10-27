@@ -595,21 +595,40 @@ document.querySelectorAll('.toRep2').forEach(e=>{
   e.href = e.href + `?lang=${localStorage.getItem('nobleLang')}`
 })
 
+const socialIconsCont = document.getElementById('socialIconsCont');
+
 async function getsocialIcons(){
-  await fetch(`/getsocialIcons/`)
-.then(res=>res.json())
-.then(async (res)=>{
-  for(let x of res)
-  socialIconsCont.insertAdjacentHTML('beforeend',`
-      <a
-        class="btn-link btn-floating btn-lg text-dark m-1"
-        href="${x.link}" target="_blank"
-        role="button"
-        data-mdb-ripple-color="dark"
-        ><i class="fa fa-${x.icon}" style="font-size:25px;color: white;"></i
-      ></a>
-`)
-})
+  if (!socialIconsCont){
+    return;
+  }
+
+  try {
+    const response = await fetch(`/getsocialIcons/`);
+    const contentType = response.headers ? response.headers.get('content-type') : '';
+
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('Unexpected response type');
+    }
+
+    const res = await response.json();
+    res.forEach((x)=>{
+      socialIconsCont.insertAdjacentHTML('beforeend',`
+        <a
+          class="btn-link btn-floating btn-lg text-dark m-1"
+          href="${x.link}"
+          target="_blank"
+          role="button"
+          data-mdb-ripple-color="dark"
+        ><i class="fa fa-${x.icon}" style="font-size:25px;color: white;"></i></a>
+      `);
+    });
+  } catch (error) {
+    console.error('Failed to load social icons:', error);
+  }
 }
 
 getsocialIcons()
