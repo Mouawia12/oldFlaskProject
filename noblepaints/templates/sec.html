@@ -640,46 +640,57 @@ if (typeof $ !== 'undefined' && $('#navbar').length){
       .children('.dropdown-menu').removeAttr('style');
   };
 
-  const bindMobileDropdowns = () => {
-    $navbar.find('li.dropdown > a.dropdown-toggle')
-      .off('click.mobileNav')
-      .on('click.mobileNav', function (e) {
-        if (!isMobile()) {
-          return;
-        }
-        e.preventDefault();
-        const $parent = $(this).parent('li.dropdown');
-        const isOpen = $parent.hasClass('open');
-        $navbar.find('li.dropdown.open').not($parent)
-          .removeClass('open')
-          .children('.dropdown-menu').stop(true, true).slideUp(180);
-        if (isOpen) {
-          $parent.removeClass('open')
-            .children('.dropdown-menu').stop(true, true).slideUp(180);
-        } else {
-          $parent.addClass('open')
-            .children('.dropdown-menu').stop(true, true).slideDown(220);
-        }
-      });
+  const toggleDropdown = function (e) {
+    if (!isMobile()) {
+      return;
+    }
+    const $trigger = $(this);
+    const $parent = $trigger.parent('li.dropdown');
+    const $menu = $parent.children('.dropdown-menu');
+
+    if (!$menu.length) {
+      return;
+    }
+
+    e.preventDefault();
+
+    const isOpen = $parent.hasClass('open');
+
+    $navbar.find('li.dropdown.open').not($parent)
+      .removeClass('open')
+      .children('.dropdown-menu').stop(true, true).slideUp(180);
+
+    if (isOpen) {
+      $parent.removeClass('open');
+      $menu.stop(true, true).slideUp(180);
+    } else {
+      $parent.addClass('open');
+      $menu.stop(true, true).slideDown(220);
+    }
   };
+
+  $navbar.on('click.mobileNav', 'li.dropdown > a.dropdown-toggle', toggleDropdown);
 
   $navbar.on('show.bs.collapse shown.bs.collapse', function(){
     document.body.classList.add('sidebar-open');
-    bindMobileDropdowns();
   });
+
   $navbar.on('hide.bs.collapse hidden.bs.collapse', function(){
     document.body.classList.remove('sidebar-open');
     resetDropdowns();
   });
+
   const closeBtn = document.querySelector('.mobile-nav-close');
   if (closeBtn){
     closeBtn.addEventListener('click', collapseMenu);
   }
+
   const backdrop = document.querySelector('.mobile-nav-backdrop');
   if (backdrop){
     backdrop.addEventListener('click', collapseMenu);
   }
-  $navbar.find('a').on('click', function(e){
+
+  $navbar.on('click', 'a', function(e){
     const $link = $(this);
     if (isMobile() && $link.hasClass('dropdown-toggle')){
       return;
