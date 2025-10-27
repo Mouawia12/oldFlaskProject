@@ -644,10 +644,29 @@ def productsSearch_page_filter_none():
     if lang not in {'en', 'ar'}:
         lang = 'en'
 
-    normalized_category = (category or 'All').strip()
-    normalized_country = (country or 'All').strip()
-    normalized_search = (search or '').strip()
-    page_value = page if page and page != 'null' else '1'
+    def _normalize(value: Any, default: str, *, treat_as_empty: bool = False) -> str:
+        """Normalize filter values that may come from JS as "null"/"undefined"."""
+        if value is None:
+            return default
+
+        value_str = str(value).strip()
+        lowered = value_str.lower()
+
+        invalid_values = {'', 'null', 'none', 'undefined'}
+        if lowered in invalid_values:
+            return '' if treat_as_empty else default
+
+        return value_str
+
+    normalized_category = _normalize(category, 'All')
+    normalized_country = _normalize(country, 'All')
+    normalized_search = _normalize(search, '', treat_as_empty=True)
+
+    try:
+        current_page = max(int(page), 1)
+    except (TypeError, ValueError):
+        current_page = 1
+    page_value = str(current_page)
 
     products, _ = get_cached_products(lang, as_objects=True)
 
