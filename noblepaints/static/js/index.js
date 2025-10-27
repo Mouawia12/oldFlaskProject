@@ -110,60 +110,73 @@ var swiper5
 /****************************************************/
 
 (async function(){
-  await fetch(`/getProducts/?lang=en`)
-.then(res=>res.json())
-.then(async (res)=>{
-  for([i,x] of Object.entries(res)){
-    if(x.id==68||x.id==71||x.id==78||x.id==80||x.id==36||x.id==20||x.id==113||x.id==64||x.id==104||x.id==76){
-      document.querySelector('#swiper2').querySelector('.swiper-wrapper').insertAdjacentHTML('beforeend',`
-      <div class='gamesList_content_div2 adventure popular all swiper-slide swiper-slide5'>
-      <img src="${x.img ? x.img : '/static/images/prod01.png'}">
-      <div>
-          <h3 style="color:#2c2c2c;height: fit-content;">${x.name}</h3>
-          <span>${x.desc}</span>
-      </div>
-      <div>
-          <a href="/product/?id=${x.id}" style="color:inherit;width:100%"><span style="width:100%" class="btn btn-success btn-block btn2 btn2radius-big btn2-width">${localStorage.getItem('nobleLang')!='ar'?'Learn More':'تصفح'}</span></a>
-      </div>
-      <span style="background-image:url('${x.img ? x.img : '/static/images/prod01.png'}')"></span>
-      </div>
-    `)
-    }
-  }
+  try {
+    const response = await fetch(`/getProducts/?lang=en`);
+    const contentType = response.headers ? response.headers.get('content-type') : '';
 
-  swiper5 = new Swiper("#swiper2", {
-    spaceBetween: 30,
-    loop:true,
-    navigation: {
-      nextEl: ".swiper-button-prev",
-      prevEl: ".swiper-button-next",
-    },
-    pagination: {
-      el: ".swiper-pagination",
-      clickable: true,
-    },
-    mousewheel: false,
-    keyboard: true,
-    breakpoints: {
-      // when window width is <= 499px
-      499: {
-        slidesPerView: 2,
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('Unexpected response type');
+    }
+
+    const res = await response.json();
+
+    for([i,x] of Object.entries(res)){
+      if(x.id==68||x.id==71||x.id==78||x.id==80||x.id==36||x.id==20||x.id==113||x.id==64||x.id==104||x.id==76){
+        document.querySelector('#swiper2').querySelector('.swiper-wrapper').insertAdjacentHTML('beforeend',`
+        <div class='gamesList_content_div2 adventure popular all swiper-slide swiper-slide5'>
+        <img src="${x.img ? x.img : '/static/images/prod01.png'}">
+        <div>
+            <h3 style="color:#2c2c2c;height: fit-content;">${x.name}</h3>
+            <span>${x.desc}</span>
+        </div>
+        <div>
+            <a href="/product/?id=${x.id}" style="color:inherit;width:100%"><span style="width:100%" class="btn btn-success btn-block btn2 btn2radius-big btn2-width">${localStorage.getItem('nobleLang')!='ar'?'Learn More':'تصفح'}</span></a>
+        </div>
+        <span style="background-image:url('${x.img ? x.img : '/static/images/prod01.png'}')"></span>
+        </div>
+      `)
+      }
+    }
+
+    swiper5 = new Swiper("#swiper2", {
+      spaceBetween: 30,
+      loop:true,
+      navigation: {
+        nextEl: ".swiper-button-prev",
+        prevEl: ".swiper-button-next",
       },
-      767: {
+      pagination: {
+        el: ".swiper-pagination",
+        clickable: true,
+      },
+      mousewheel: false,
+      keyboard: true,
+      breakpoints: {
+        // when window width is <= 499px
+        499: {
+          slidesPerView: 2,
+        },
+        767: {
+            slidesPerView: 3,
+        },
+        1000: {
           slidesPerView: 3,
-      },
-      1000: {
-        slidesPerView: 3,
-      },
-      1200: {
+        },
+        1200: {
+            slidesPerView: 4,
+        },
+        3000: {
           slidesPerView: 4,
+        },
       },
-      3000: {
-        slidesPerView: 4,
-    },
+    });
+  } catch (error) {
+    console.error('Failed to load featured products:', error);
   }
-  });
-})
 })()
 
 
