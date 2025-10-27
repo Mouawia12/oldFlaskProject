@@ -66,6 +66,9 @@
         opacity: 1;
         visibility: visible;
       }
+      .navbar-header .mobile-brand {
+        display: none;
+      }
       .mobile-nav-close {
         background: none;
         border: 0;
@@ -77,10 +80,26 @@
         display: none;
       }
       @media (max-width: 992px) {
+        .navbar.navbar-inverse {
+          padding: 0.75rem 1rem;
+        }
         .navbar-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          gap: 1rem;
+        }
+        .navbar-header .mobile-brand {
+          display: inline-flex;
+          align-items: center;
+        }
+        .navbar-header .mobile-brand img {
+          height: 48px;
+          width: auto;
+        }
+        .navbar-toggle {
+          margin: 0;
+          border: 0;
         }
         .navbar-collapse {
           position: fixed;
@@ -90,10 +109,14 @@
           max-width: 85%;
           height: 100vh;
           background: #0f2642;
-          padding: 2.5rem 1.5rem;
+          padding: 2.5rem 1.75rem;
           z-index: 99999;
           overflow-y: auto;
           transition: right .3s ease;
+          display: flex !important;
+          flex-direction: column;
+          align-items: flex-start;
+          box-shadow: -12px 0 35px rgba(0, 0, 0, 0.35);
         }
         .navbar-collapse.in,
         .navbar-collapse.show {
@@ -101,13 +124,22 @@
         }
         .navbar-collapse .nav {
           flex-direction: column !important;
-          gap: 0.75rem;
+          gap: 0;
+          width: 100%;
+        }
+        .navbar-collapse .nav > li {
+          width: 100%;
         }
         .navbar-collapse .nav > li > a {
           display: block;
-          font-size: 1.1rem;
-          padding: 0.5rem 0;
+          font-size: 1.05rem;
+          padding: 0.75rem 0;
           color: #fff !important;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+          width: 100%;
+        }
+        .navbar-collapse .nav > li:last-child > a {
+          border-bottom: none;
         }
         .navbar-collapse .dropdown-menu {
           position: static;
@@ -115,13 +147,19 @@
           background: transparent;
           border: 0;
           box-shadow: none;
+          padding: 0.5rem 0 0.5rem 0.75rem;
         }
         .navbar-collapse .dropdown-menu > li > a {
           color: #e2e8f0 !important;
           padding-left: 1rem;
+          border-bottom: 0;
         }
         .mobile-nav-close {
           display: inline-block;
+          align-self: flex-end;
+        }
+        #navbar .navbar-logo-inline {
+          display: none;
         }
       }
     </style>
@@ -182,6 +220,9 @@
         <nav class="navbar navbar-inverse" role="navigation">
             <div class="container2">
               <div class="navbar-header">
+                <a class="navbar-brand mobile-brand" href="/" aria-label="Noble Paints">
+                  <img src="/static/images/logo.png" alt="Noble Paints logo">
+                </a>
                 <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
                   <span class="sr-only">Toggle navigation</span>
                   <span class="icon-bar"></span>
@@ -189,10 +230,10 @@
                   <span class="icon-bar"></span>
                 </button>
               </div>
-      
+
               <div id="navbar" class="navbar-collapse collapse toLoad-show" aria-expanded="false">
                 <button type="button" class="mobile-nav-close" aria-label="Close">&times;</button>
-               <img height="90px" src="/static/images/logo.png" alt="logo" onclick="location.href='/'">
+               <img class="navbar-logo-inline" height="90px" src="/static/images/logo.png" alt="logo" onclick="location.href='/'">
                 <ul class="nav navbar-nav" style="display:flex;flex-direction: row;">
       
                   <li><a href="/" class="text2">Home</a></li>
