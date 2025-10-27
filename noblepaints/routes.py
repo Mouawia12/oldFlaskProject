@@ -1378,18 +1378,22 @@ def categories_del(id):
 
 @app.route('/getProducts/')
 def get_products():
-    lang=request.args.get('lang')
-    y = db.session.query(Product).filter(Product.lang==lang)
+    lang = request.args.get('lang', 'en')
+    if lang not in {'en', 'ar'}:
+        lang = 'en'
+    query = db.session.query(Product).filter(Product.lang == lang)
     x = ProductSchema(many=True)
-    z = x.dump(y)
-    return jsonify(z)
+    return jsonify(x.dump(query))
 
 @app.route('/getsocialIcons/')
 def getsocialIcons():
-    y = db.session.query(Social).all()
-    x = SocialSchema(many=True)
-    z = x.dump(y)
-    return jsonify(z)
+    try:
+        data = db.session.query(Social).all()
+    except Exception as exc:
+        print(f'Error loading social icons: {exc}')
+        return jsonify([])
+    schema = SocialSchema(many=True)
+    return jsonify(schema.dump(data))
 
 ################################################################
 

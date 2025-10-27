@@ -8,15 +8,7 @@ let langs2 = {
         `Catalogs`,
         `Technical Datasheets`,
         `TechnicalDatasheets`,
-        `Personal Use`,
-        `Find A Product`,
-        `Our Categories`,
-        `Our Story`,
-        `About Us`,
-        `Our Certificates`,
-        `Approvals`,
-        `Find A Store`,
-        `Language`,
+
         `ESSENTIAL`,
         `TOOLS`,
         `CATALOGS

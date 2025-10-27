@@ -111,7 +111,8 @@ var swiper5
 
 (async function(){
   try {
-    const response = await fetch(`/getProducts/?lang=en`);
+        const lang = localStorage.getItem('nobleLang') || 'en';
+    const response = await fetch(`/getProducts/?lang=${lang}`);
     const contentType = response.headers ? response.headers.get('content-type') : '';
 
     if (!response.ok) {
