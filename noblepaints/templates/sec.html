@@ -675,6 +675,10 @@ if (typeof $ !== 'undefined' && $('#navbar').length){
     }
 
     e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') {
+      e.stopImmediatePropagation();
+    }
 
     const isOpen = $parent.hasClass('open');
 
