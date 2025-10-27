@@ -3,14 +3,16 @@ from datetime import datetime
 import time
 from io import BytesIO
 import os
-from sqlalchemy import insert
+from threading import RLock
+from types import SimpleNamespace
+from typing import Any, Dict, Iterable, List, Tuple
+from sqlalchemy import insert, event
 from sqlalchemy.orm import noload
 import pathlib
 import requests
 from flask import render_template,request,jsonify,send_from_directory,redirect,url_for,flash,session,abort,make_response,Response, send_file,json
-from noblepaints.models import Category,Product,Catalog,TechnicalDatasheet,Post,Certificate,Approval,ProductSchema,Upload,SocialSchema,Social
+from noblepaints.models import Category,Product,Catalog,TechnicalDatasheet,Post,Certificate,Approval,Upload,SocialSchema,Social
 from sqlalchemy import desc
-from functools import lru_cache
 from urllib.parse import urlencode
 from flask_httpauth import HTTPBasicAuth
 from flask_mail import Message
@@ -109,6 +111,135 @@ with app.app_context():
 #os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 app.secret_key = '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'
 
+# ----------------------------------------------------------------------------
+# Simple in-memory caching helpers
+# ----------------------------------------------------------------------------
+
+_data_cache: Dict[str, Dict[str, Any]] = {}
+_cache_lock = RLock()
+
+
+def _cache_get(key: str) -> Tuple[Any, float]:
+    """Return cached data and timestamp if still valid, otherwise (None, 0)."""
+    with _cache_lock:
+        entry = _data_cache.get(key)
+        if not entry:
+            return None, 0.0
+
+        ttl = entry.get('ttl', 0)
+        timestamp = entry.get('timestamp', 0.0)
+        if ttl and (time.time() - timestamp) > ttl:
+            _data_cache.pop(key, None)
+            return None, 0.0
+
+        return entry.get('data'), timestamp
+
+
+def _cache_set(key: str, data: Any, ttl: int) -> Tuple[Any, float]:
+    """Store data in cache with TTL and return (data, timestamp)."""
+    now = time.time()
+    with _cache_lock:
+        _data_cache[key] = {'data': data, 'timestamp': now, 'ttl': ttl}
+    return data, now
+
+
+def _cache_invalidate(*prefixes: str) -> None:
+    """Invalidate cache entries. If no prefixes provided clear everything."""
+    with _cache_lock:
+        if not prefixes:
+            _data_cache.clear()
+            return
+
+        keys = list(_data_cache.keys())
+        for key in keys:
+            if any(key.startswith(prefix) for prefix in prefixes):
+                _data_cache.pop(key, None)
+
+
+def _to_namespace(data: Iterable[Dict[str, Any]]) -> List[SimpleNamespace]:
+    """Convert dictionaries to SimpleNamespace for template attribute access."""
+    return [SimpleNamespace(**item) for item in data]
+
+
+# ----------------------------------------------------------------------------
+# Model specific caching helpers
+# ----------------------------------------------------------------------------
+
+PRODUCT_CACHE_TTL = 600  # 10 minutes keeps responses fresh while reducing DB hits
+SOCIAL_CACHE_TTL = 900   # 15 minutes for rarely-changing social icons
+
+
+def _serialize_product(product: Product) -> Dict[str, Any]:
+    return {
+        'id': product.id,
+        'img': product.img or '',
+        'name': product.name or '',
+        'desc': product.desc or '',
+        'country': product.country or '',
+        'category': product.category or '',
+        'lang': product.lang or '',
+        'datasheet': product.datasheet or ''
+    }
+
+
+def _get_products_payload(lang: str) -> Tuple[List[Dict[str, Any]], float]:
+    cache_key = f'products:{lang or "all"}'
+    cached, timestamp = _cache_get(cache_key)
+    if cached is not None:
+        return cached, timestamp
+
+    products = db.session.query(Product).filter(Product.lang == lang).options(noload('*')).all()
+    serialized = [_serialize_product(product) for product in products]
+    return _cache_set(cache_key, serialized, PRODUCT_CACHE_TTL)
+
+
+def get_cached_products(lang: str, as_objects: bool = False) -> Tuple[List[Any], float]:
+    """Return cached products in dict or namespace form with timestamp."""
+    data, timestamp = _get_products_payload(lang)
+    if as_objects:
+        return _to_namespace(data), timestamp
+    return data, timestamp
+
+
+def get_cached_social_icons(as_objects: bool = False) -> Tuple[List[Any], float]:
+    cache_key = 'social-icons'
+    cached, timestamp = _cache_get(cache_key)
+    if cached is None:
+        icons = db.session.query(Social).options(noload('*')).all()
+        schema = SocialSchema(many=True)
+        serialized = schema.dump(icons)
+        cached, timestamp = _cache_set(cache_key, serialized, SOCIAL_CACHE_TTL)
+
+    if as_objects:
+        return _to_namespace(cached), timestamp
+    return cached, timestamp
+
+
+# ----------------------------------------------------------------------------
+# Automatic cache invalidation hooks
+# ----------------------------------------------------------------------------
+
+
+@event.listens_for(Product, 'after_insert')
+@event.listens_for(Product, 'after_update')
+@event.listens_for(Product, 'after_delete')
+def _clear_product_cache(*_) -> None:
+    _cache_invalidate('products:')
+
+
+@event.listens_for(Category, 'after_insert')
+@event.listens_for(Category, 'after_update')
+@event.listens_for(Category, 'after_delete')
+def _clear_category_cache(*_) -> None:
+    invalidate_categories_cache()
+
+
+@event.listens_for(Social, 'after_insert')
+@event.listens_for(Social, 'after_update')
+@event.listens_for(Social, 'after_delete')
+def _clear_social_cache(*_) -> None:
+    _cache_invalidate('social-icons')
+
 auth = HTTPBasicAuth()
 
 @auth.verify_password
@@ -135,9 +266,10 @@ def show_static_pdf(upload_id):
 @app.route('/en/')
 @app.route('/ar/')
 @app.route('/')
-def home_page():  
-    # Only load featured products or limit the query instead of all products
-    featured_products = db.session.query(Product).limit(10).all()
+def home_page():
+    lang = 'ar' if request.path.startswith('/ar') else 'en'
+    products, _ = get_cached_products(lang, as_objects=True)
+    featured_products = products[:10]
     return render_template('index.html', products=featured_products)
 
 @app.route('/ral-colors/')
@@ -217,6 +349,11 @@ categories_cache = {
     'ttl': 300  # Cache for 5 minutes
 }
 
+
+def invalidate_categories_cache() -> None:
+    categories_cache['data'] = None
+    categories_cache['timestamp'] = 0
+
 def get_cached_categories():
     """Get categories with caching to reduce database load - OPTIMIZED VERSION"""
     current_time = time.time()
@@ -276,6 +413,10 @@ def get_cached_categories():
         return [
             {'id': 0, 'name': 'Loading...', 'nameArabic': 'جاري التحميل...', 'desc': 'Please wait', 'img': '/static/images/loading.gif'}
         ]
+
+
+def get_categories_for_template() -> List[SimpleNamespace]:
+    return _to_namespace(get_cached_categories())
 
 @app.route('/categories/')
 def categories_page():
@@ -471,171 +612,50 @@ def products_cat_page(cat):
             )
 
 @app.route('/productsSearch/')
-def productsSearch_page_filter_none():  
-    cat = request.args.get('category')
+def productsSearch_page_filter_none():
+    category = request.args.get('category')
     page = request.args.get('page')
     search = request.args.get('search')
     country = request.args.get('country')
-    #lang = request.args.get('lang')
-    lang = 'en'
-    if search == None or search == "null" or search == "":
-        if country == "All" or country == None or country == "null" or country == "":
-            if page == None or page == "null":
-                if cat == "All" or cat == None or cat == "null":
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.lang==lang,Product.name.contains("")).all(),
-                        page="1",
-                        category="All",
-                        search="",
-                        country="All",
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-                else:
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.category==cat,Product.lang==lang,Product.name.contains("")).all(),
-                        page="1",
-                        category=cat,
-                        search="",
-                        country="All",
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-            else:
-                if cat == "All" or cat == None or cat == "null":
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.lang==lang,Product.lang==lang,Product.name.contains("")).all(),
-                        page=page,
-                        category="All",
-                        search="",
-                        country="All",
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                        )
-                else:
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.category==cat,Product.lang==lang,Product.name.contains("")).all(),
-                        page=page,
-                        category=cat,
-                        search="",
-                        country="All",
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-        else:
-            if page == None or page == "null":
-                if cat == "All" or cat == None or cat == "null":
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.country==country,Product.lang==lang,Product.name.contains("")).all(),
-                        page="1",
-                        category="All",
-                        search="",
-                        country=country,
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-                else:
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.country==country,Product.lang==lang,Product.name.contains("")).all(),
-                        page="1",
-                        category=cat,
-                        search="",
-                        country=country,
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-            else:
-                if cat == "All" or cat == None or cat == "null":
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.country==country,Product.lang==lang,Product.name.contains("")).all(),
-                        page=page,
-                        category="All",
-                        search="",
-                        country=country,
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-                else:
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.country==country,Product.lang==lang,Product.name.contains("")).all(),
-                        page=page,
-                        category=cat,
-                        search="",
-                        country=country,
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-    else:
-        if country == "All" or country == None or country == "null" or country == "":
-            if page == None or page == "null":
-                if cat == "All" or cat == None or cat == "null":
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.lang==lang,Product.name.contains(search)).all(),
-                        page="1",
-                        category="All",
-                        search=search,
-                        country="All",
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-                else:
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.category==cat,Product.lang==lang,Product.name.contains(search)).all(),
-                        page="1",
-                        category=cat,
-                        search=search,
-                        country="All",
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-            else:
-                if cat == "All" or cat == None or cat == "null":
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.lang==lang,Product.name.contains(search)).all(),
-                        page=page,
-                        category="All",
-                        search=search,
-                        country="All",
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                        )
-                else:
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.category==cat,Product.lang==lang,Product.name.contains(search)).all(),
-                        page=page,
-                        category=cat,
-                        search=search,
-                        country="All",
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-        else:
-            if page == None or page == "null":
-                if cat == "All" or cat == None or cat == "null":
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.country==country,Product.lang==lang,Product.name.contains(search)).all(),
-                        page="1",
-                        category="All",
-                        search=search,
-                        country=country,
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-                else:
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.country==country,Product.lang==lang,Product.name.contains(search)).all(),
-                        page="1",
-                        category=cat,
-                        search=search,
-                        country=country,
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-            else:
-                if cat == "All" or cat == None or cat == "null":
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.country==country,Product.lang==lang,Product.name.contains(search)).all(),
-                        page=page,
-                        category="All",
-                        search=search,
-                        country=country,
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
-                else:
-                    return render_template('productsSearch.html',items = db.session.query(Product).filter(Product.country==country,Product.lang==lang,Product.name.contains(search)).all(),
-                        page=page,
-                        category=cat,
-                        search=search,
-                        country=country,
-                        categories = db.session.query(Category).all(),
-                        template = 'products'
-                    )
+    lang = request.args.get('lang', 'en')
+
+    if lang not in {'en', 'ar'}:
+        lang = 'en'
+
+    normalized_category = (category or 'All').strip()
+    normalized_country = (country or 'All').strip()
+    normalized_search = (search or '').strip()
+    page_value = page if page and page != 'null' else '1'
+
+    products, _ = get_cached_products(lang, as_objects=True)
+
+    search_lower = normalized_search.lower()
+    results = []
+    for product in products:
+        product_category = (product.category or '').strip()
+        product_country = (product.country or '').strip()
+        product_name = (product.name or '').strip()
+
+        if normalized_category not in {'All', '', 'null'} and product_category != normalized_category:
+            continue
+        if normalized_country not in {'All', '', 'null'} and product_country != normalized_country:
+            continue
+        if search_lower and search_lower not in product_name.lower():
+            continue
+        results.append(product)
+
+    categories = get_categories_for_template()
+
+    return render_template(
+        'productsSearch.html',
+        items=results,
+        page=page_value,
+        category=normalized_category if normalized_category else 'All',
+        search=normalized_search,
+        country=normalized_country if normalized_country else 'All',
+        categories=categories,
+        template='products'
+    )
 
 
 @app.route('/catalogs/')
@@ -1381,19 +1401,33 @@ def get_products():
     lang = request.args.get('lang', 'en')
     if lang not in {'en', 'ar'}:
         lang = 'en'
-    query = db.session.query(Product).filter(Product.lang == lang)
-    x = ProductSchema(many=True)
-    return jsonify(x.dump(query))
+    data, timestamp = get_cached_products(lang)
+    etag = f'products-{lang}-{int(timestamp)}'
+
+    if request.headers.get('If-None-Match') == etag:
+        return '', 304
+
+    response = jsonify(data)
+    response.headers['Cache-Control'] = f'public, max-age={PRODUCT_CACHE_TTL}'
+    response.headers['ETag'] = etag
+    return response
 
 @app.route('/getsocialIcons/')
 def getsocialIcons():
     try:
-        data = db.session.query(Social).all()
+        data, timestamp = get_cached_social_icons()
     except Exception as exc:
         print(f'Error loading social icons: {exc}')
         return jsonify([])
-    schema = SocialSchema(many=True)
-    return jsonify(schema.dump(data))
+
+    etag = f'social-icons-{int(timestamp)}'
+    if request.headers.get('If-None-Match') == etag:
+        return '', 304
+
+    response = jsonify(data)
+    response.headers['Cache-Control'] = f'public, max-age={SOCIAL_CACHE_TTL}'
+    response.headers['ETag'] = etag
+    return response
 
 ################################################################
 
@@ -1402,6 +1436,11 @@ try:
     with app.app_context():
         print("Pre-warming categories cache...")
         get_cached_categories()
-        print("Categories cache pre-warmed successfully")
+        print("Pre-warming product cache...")
+        get_cached_products('en')
+        get_cached_products('ar')
+        print("Pre-warming social icons cache...")
+        get_cached_social_icons()
+        print("Application caches pre-warmed successfully")
 except Exception as e:
-    print(f"Could not pre-warm categories cache: {e}")
+    print(f"Could not pre-warm caches: {e}")
