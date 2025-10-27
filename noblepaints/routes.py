@@ -183,12 +183,34 @@ def _serialize_product(product: Product) -> Dict[str, Any]:
 
 
 def _get_products_payload(lang: str) -> Tuple[List[Dict[str, Any]], float]:
-    cache_key = f'products:{lang or "all"}'
+    """Return serialized products for the requested language with sensible fallbacks."""
+
+    normalized_lang = (lang or 'en').lower()
+    if normalized_lang not in {'en', 'ar'}:
+        normalized_lang = 'en'
+
+    cache_key = f'products:{normalized_lang}'
     cached, timestamp = _cache_get(cache_key)
     if cached is not None:
         return cached, timestamp
 
-    products = db.session.query(Product).filter(Product.lang == lang).options(noload('*')).all()
+    base_query = db.session.query(Product).options(noload('*'))
+
+    if normalized_lang == 'ar':
+        arabic_products = base_query.filter(Product.lang == 'ar').all()
+        fallback_products = base_query.filter(Product.lang == 'en').all()
+
+        # Keep Arabic entries first and append English ones that do not already exist.
+        seen_ids = {product.id for product in arabic_products}
+        combined_products = list(arabic_products)
+        combined_products.extend(
+            product for product in fallback_products
+            if product.id not in seen_ids
+        )
+        products = combined_products
+    else:
+        products = base_query.filter(Product.lang == normalized_lang).all()
+
     serialized = [_serialize_product(product) for product in products]
     return _cache_set(cache_key, serialized, PRODUCT_CACHE_TTL)
 
