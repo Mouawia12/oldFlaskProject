@@ -622,6 +622,39 @@ input[type=number] {
     width: 100%;
 }
 
+.navbar-nav.main-nav {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 15px;
+}
+
+@media (max-width: 991.98px){
+    .navbar-nav.main-nav {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+    }
+
+    #navbar .dropdown-menu {
+        position: static;
+        float: none;
+        width: 100%;
+        margin: 0;
+        background-color: transparent;
+        border: 0;
+        box-shadow: none;
+        padding: 0;
+    }
+
+    #navbar .dropdown-menu a {
+        display: block;
+        width: 100%;
+        padding: 12px 15px;
+        color: inherit;
+    }
+}
+
 .navbar-inverse .navbar-toggle .icon-bar{
     background-color:var(--blue);
 }
