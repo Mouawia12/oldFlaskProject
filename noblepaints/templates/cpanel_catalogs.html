@@ -85,7 +85,22 @@
                                 <img src="{{x.img}}" width="80px">
                               </span>
                             </td>
-                            <td><span class="fw-normal"><a href="/download/{{x.link}}">الرابط</a></span></td>                        
+                            <td>
+                                <span class="fw-normal">
+                                    {% set link_value = x.link %}
+                                    {% if link_value %}
+                                        {% set link_str = link_value ~ '' %}
+                                        {% set link_id = link_str | int %}
+                                        {% if link_str.isdigit() and link_id > 0 %}
+                                            <a href="{{ url_for('download', upload_id=link_id) }}" target="_blank" rel="noopener">الرابط</a>
+                                        {% else %}
+                                            <a href="{{ link_value }}" target="_blank" rel="noopener">الرابط</a>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">لا يوجد</span>
+                                    {% endif %}
+                                </span>
+                            </td>                        
                             <td><span class="fw-normal">{{x.category}}</span></td> 
                             <td><span class="fw-normal">{{x.country}}</span></td>   
                             <td>
@@ -534,4 +549,3 @@ changeLangCont.classList.add('hidden')
 /********************************************/
 </script>
 {% endblock %}
-

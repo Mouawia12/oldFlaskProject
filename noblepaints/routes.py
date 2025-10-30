@@ -6,7 +6,7 @@ import os
 from threading import RLock
 from types import SimpleNamespace
 from typing import Any, Dict, Iterable, List, Tuple
-from sqlalchemy import insert, event
+from sqlalchemy import event, text
 from sqlalchemy.orm import noload
 import pathlib
 import requests
@@ -16,22 +16,27 @@ from sqlalchemy import desc
 from urllib.parse import urlencode
 from flask_httpauth import HTTPBasicAuth
 from flask_mail import Message
+from sqlalchemy.exc import SQLAlchemyError
 
 # Initialize database tables once at startup
 with app.app_context():
     db.create_all()
-    
+
     # Add database indexes for better performance
     try:
-        # Create indexes if they don't exist (SQLite compatible)
-        db.engine.execute('CREATE INDEX IF NOT EXISTS idx_category_id ON category(id)')
-        db.engine.execute('CREATE INDEX IF NOT EXISTS idx_product_category ON product(category)')
-        db.engine.execute('CREATE INDEX IF NOT EXISTS idx_product_lang ON product(lang)')
-        db.engine.execute('CREATE INDEX IF NOT EXISTS idx_catalog_lang ON catalog(lang)')
-        db.engine.execute('CREATE INDEX IF NOT EXISTS idx_catalog_category ON catalog(category)')
-        print("Database indexes created/verified for better performance")
-    except Exception as e:
-        print(f"Note: Could not create indexes (may already exist): {e}")
+        index_statements = (
+            "CREATE INDEX IF NOT EXISTS idx_category_id ON category(id)",
+            "CREATE INDEX IF NOT EXISTS idx_product_category ON product(category)",
+            "CREATE INDEX IF NOT EXISTS idx_product_lang ON product(lang)",
+            "CREATE INDEX IF NOT EXISTS idx_catalog_lang ON catalog(lang)",
+            "CREATE INDEX IF NOT EXISTS idx_catalog_category ON catalog(category)",
+        )
+        with db.engine.begin() as connection:
+            for statement in index_statements:
+                connection.execute(text(statement))
+        app.logger.debug("Database indexes created/verified for better performance")
+    except SQLAlchemyError as exc:
+        app.logger.debug("Index creation skipped (likely already exists): %s", exc)
 
     # Seed default approvals logos if none exist to keep legacy content visible
     try:
@@ -54,9 +59,11 @@ with app.app_context():
                     link=''
                 ))
             db.session.commit()
-            print("Seeded default approvals data")
+            app.logger.debug("Seeded default approvals data")
     except Exception as seed_error:
-        print(f"Could not seed default approvals: {seed_error}")
+        db.session.rollback()
+        app.logger.warning("Could not seed default approvals: %s", seed_error)
+
     # Seed default certificates images if none exist
     try:
         if db.session.query(Certificate).count() == 0:
@@ -94,9 +101,10 @@ with app.app_context():
                     link=''
                 ))
             db.session.commit()
-            print("Seeded default certificates data")
+            app.logger.debug("Seeded default certificates data")
     except Exception as cert_seed_error:
-        print(f"Could not seed default certificates: {cert_seed_error}")
+        db.session.rollback()
+        app.logger.warning("Could not seed default certificates: %s", cert_seed_error)
 
 # Cache will be pre-warmed after function definitions
 
@@ -109,7 +117,7 @@ with app.app_context():
 #Authlib==0.14.3
 
 #os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-app.secret_key = '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'
+app.secret_key = app.config["SECRET_KEY"]
 
 # ----------------------------------------------------------------------------
 # Simple in-memory caching helpers
@@ -270,19 +278,31 @@ def verify_password(username,password):
         return True
  
 # create download function for download files
-@app.route('/download/<upload_id>')
-def download(upload_id):
-    upload = Upload.query.filter_by(id=upload_id).first()
-    return send_file(BytesIO(upload.data),
-                     download_name=upload.filename, as_attachment=True)
+@app.route('/download/<int:upload_id>')
+def download(upload_id: int):
+    upload = db.session.get(Upload, upload_id)
+    if not upload or not upload.data:
+        abort(404)
 
-@app.route('/show/<upload_id>/')
-def show_static_pdf(upload_id):
-    upload = Upload.query.filter_by(id=upload_id).first()
-    pdf = BytesIO()
-    pdf.write(upload.data)
-    pdf.seek(0)
-    return send_file(pdf, as_attachment=False, mimetype='application/pdf')
+    return send_file(
+        BytesIO(upload.data),
+        download_name=upload.filename or f"file-{upload_id}",
+        as_attachment=True,
+    )
+
+
+@app.route('/show/<int:upload_id>/')
+def show_static_pdf(upload_id: int):
+    upload = db.session.get(Upload, upload_id)
+    if not upload or not upload.data:
+        abort(404)
+
+    return send_file(
+        BytesIO(upload.data),
+        as_attachment=False,
+        download_name=upload.filename or f"document-{upload_id}.pdf",
+        mimetype='application/pdf',
+    )
 
 @app.route('/home')
 @app.route('/en/')
@@ -311,16 +331,27 @@ def get_video():
 
 @app.route('/sendC/',methods=["POST","GET"])
 def sendC():
-    data = request.get_json()  
-    print(data["type"],data["name"],data["phone"])
-    msg = Message(data["type"],sender = "noreply@demo.com",recipients = ["info@noblepaints.com.sa"])
-    msg.body = f'''
-    :Noble Paints Customers:\n
-    Name: {data["name"]}\n
-    Company Name: {data["comp"]}\n
-    Phone: {data["phone"]}\n
-    Message: {data["message"]}\n
-    '''
+    data = request.get_json() or {}
+    app.logger.debug(
+        "Contact message received: type=%s name=%s phone=%s",
+        data.get("type"),
+        data.get("name"),
+        data.get("phone"),
+    )
+    subject = data.get("type") or "Website enquiry"
+    msg = Message(subject, sender="noreply@demo.com", recipients=["info@noblepaints.com.sa"])
+    name = data.get("name") or "N/A"
+    company = data.get("comp") or "N/A"
+    phone = data.get("phone") or "N/A"
+    message = data.get("message") or ""
+
+    msg.body = (
+        "Noble Paints Customers:\n\n"
+        f"Name: {name}\n"
+        f"Company Name: {company}\n"
+        f"Phone: {phone}\n"
+        f"Message: {message}\n"
+    )
     mail.send(msg)
 
 @app.route('/about/')
@@ -383,11 +414,11 @@ def get_cached_categories():
     # Check if cache is valid
     if (categories_cache['data'] is not None and 
         current_time - categories_cache['timestamp'] < categories_cache['ttl']):
-        print(f"Returning cached categories: {len(categories_cache['data'])} items")
+        app.logger.debug("Returning cached categories: %d items", len(categories_cache['data']))
         return categories_cache['data']
     
     try:
-        print("Fetching categories from database...")
+        app.logger.debug("Fetching categories from database...")
         # SUPER OPTIMIZED query: include img field for proper image loading
         categories = db.session.query(
             Category.id, 
@@ -399,14 +430,14 @@ def get_cached_categories():
             Category.id != 29
         ).order_by(Category.id).all()
         
-        print(f"Database returned {len(categories)} categories")
+        app.logger.debug("Database returned %d categories", len(categories))
         
         # Convert to lightweight dictionary format
         categories_list = []
         for cat in categories:
             # Use img directly from query result - debug what we're getting
             img_url = cat.img if cat.img else '/static/images/default.png'
-            print(f"Category {cat.id} ({cat.name}): img = '{cat.img}'")  # Debug line
+            app.logger.debug("Category %s (%s): img = '%s'", cat.id, cat.name, cat.img)
                 
             categories_list.append({
                 'id': cat.id,
@@ -420,18 +451,21 @@ def get_cached_categories():
         categories_cache['data'] = categories_list
         categories_cache['timestamp'] = current_time
         
-        print(f"Cached {len(categories_list)} categories with optimized data")
+        app.logger.debug("Cached %d categories with optimized data", len(categories_list))
         return categories_list
         
     except Exception as e:
-        print(f"Database error in get_cached_categories: {e}")
+        app.logger.warning("Database error in get_cached_categories: %s", e)
         # Return cached data if available, even if stale
         if categories_cache['data'] is not None:
-            print(f"Returning stale cached data: {len(categories_cache['data'])} items")
+            app.logger.warning(
+                "Returning stale cached data: %d items",
+                len(categories_cache['data'])
+            )
             return categories_cache['data']
         
         # Last resort: return minimal structure
-        print("No cached data available, returning minimal fallback")
+        app.logger.warning("No cached data available, returning minimal fallback response")
         return [
             {'id': 0, 'name': 'Loading...', 'nameArabic': 'جاري التحميل...', 'desc': 'Please wait', 'img': '/static/images/loading.gif'}
         ]
@@ -446,7 +480,7 @@ def categories_page():
     try:
         # Get categories with minimal data first for fast page load
         categories = get_cached_categories()
-        print(f"Categories page: got {len(categories)} categories for fallback")
+        app.logger.debug("Categories page: got %d categories for fallback", len(categories))
         
         # Return page immediately with cached data - AJAX will enhance if needed
         response = make_response(render_template('categories.html', categories=categories, template='cats'))
@@ -458,7 +492,7 @@ def categories_page():
         return response
         
     except Exception as e:
-        print(f"Error in categories_page: {e}")
+        app.logger.exception("Error in categories_page")
         # Return minimal page structure if there's an error
         response = make_response(render_template('categories.html', categories=[], template='cats'))
         response.headers['Cache-Control'] = 'public, max-age=60'  # Shorter cache for errors
@@ -505,11 +539,11 @@ def api_categories():
         response.headers['Cache-Control'] = 'public, max-age=300'
         response.headers['ETag'] = current_etag
         
-        print(f"API Categories: Returning {len(enhanced_categories)} categories with images")
+        app.logger.debug("API Categories: returning %d categories with images", len(enhanced_categories))
         return response
         
     except Exception as e:
-        print(f"Error in api_categories: {e}")
+        app.logger.exception("Error in api_categories")
         return jsonify({
             'categories': [],
             'count': 0,
@@ -561,8 +595,8 @@ def certificates_page():
             lang=lang,
             template='certificates'
         )
-    except Exception as e:
-        print(f"Error in certificates page: {e}")
+    except Exception:
+        app.logger.exception("Error in certificates page")
         return "Internal server error in certificates page", 500
 
 @app.route('/approvals/')
@@ -591,8 +625,8 @@ def approvals_page():
             lang=lang,
             template='approvals'
         )
-    except Exception as e:
-        print(f"Error in approvals page: {e}")
+    except Exception:
+        app.logger.exception("Error in approvals page")
         return "Internal server error in approvals page", 500
 
 @app.route('/news/<id>/')
@@ -809,8 +843,8 @@ def catalogs_page_filter_none():
             items_per_page=items_per_page,
             query_without_page=query_without_page
         )
-    except Exception as e:
-        print(f"Error in catalogs route: {e}")
+    except Exception:
+        app.logger.exception("Error in catalogs route")
         return "Internal server error in catalogs page", 500
 
 
@@ -866,9 +900,9 @@ def TechnicalDatasheets_page_filter_none():
             items_per_page=items_per_page,
             template='technical'
         )
-    except Exception as e:
+    except Exception:
         # Fallback to basic functionality if something goes wrong
-        print(f"Error in TechnicalDatasheets route: {e}")
+        app.logger.exception("Error in TechnicalDatasheets route")
         try:
             # Simple fallback query
             items = db.session.query(Product).filter(Product.lang == 'en').limit(12).all()
@@ -885,7 +919,7 @@ def TechnicalDatasheets_page_filter_none():
                 template='technical'
             )
         except Exception as fallback_error:
-            print(f"TechnicalDatasheets fallback error: {fallback_error}")
+            app.logger.exception("TechnicalDatasheets fallback error")
             return "Internal server error in TechnicalDatasheets page", 500
 
 
@@ -1458,7 +1492,7 @@ def getsocialIcons():
     try:
         data, timestamp = get_cached_social_icons()
     except Exception as exc:
-        print(f'Error loading social icons: {exc}')
+        app.logger.error("Error loading social icons: %s", exc)
         return jsonify([])
 
     etag = f'social-icons-{int(timestamp)}'
@@ -1475,13 +1509,13 @@ def getsocialIcons():
 # Performance: Pre-warm the categories cache on startup
 try:
     with app.app_context():
-        print("Pre-warming categories cache...")
+        app.logger.debug("Pre-warming categories cache...")
         get_cached_categories()
-        print("Pre-warming product cache...")
+        app.logger.debug("Pre-warming product cache...")
         get_cached_products('en')
         get_cached_products('ar')
-        print("Pre-warming social icons cache...")
+        app.logger.debug("Pre-warming social icons cache...")
         get_cached_social_icons()
-        print("Application caches pre-warmed successfully")
+        app.logger.debug("Application caches pre-warmed successfully")
 except Exception as e:
-    print(f"Could not pre-warm caches: {e}")
+    app.logger.warning("Could not pre-warm caches: %s", e)

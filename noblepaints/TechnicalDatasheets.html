@@ -315,20 +315,27 @@
                             <img src="/static/images/icons/reader-icon.png" alt="icon" loading="lazy">{{x.name}}
                         </div>
                         <div class="action">
-                            {% if x.lang == 'ar' %}
-                            <a class="view" href="/show/{{x.datasheet}}" target="_blank">
-                                <img src="/static/images/icons/view-icon.png" alt="view" loading="lazy">عرض
-                            </a>
-                            <a class="download" href="/download/{{x.datasheet}}" download="">
-                                <img src="/static/images/icons/download-icon.png" alt="download" loading="lazy">تحميل
-                            </a>
+                            {% set datasheet_id = (x.datasheet | int) if x.datasheet else 0 %}
+                            {% if datasheet_id > 0 %}
+                                {% if x.lang == 'ar' %}
+                                <a class="view" href="{{ url_for('show_static_pdf', upload_id=datasheet_id) }}" target="_blank" rel="noopener">
+                                    <img src="/static/images/icons/view-icon.png" alt="view" loading="lazy">عرض
+                                </a>
+                                <a class="download" href="{{ url_for('download', upload_id=datasheet_id) }}" download="" rel="noopener">
+                                    <img src="/static/images/icons/download-icon.png" alt="download" loading="lazy">تحميل
+                                </a>
+                                {% else %}
+                                <a class="view" href="{{ url_for('show_static_pdf', upload_id=datasheet_id) }}" target="_blank" rel="noopener">
+                                    <img src="/static/images/icons/view-icon.png" alt="view" loading="lazy">View
+                                </a>
+                                <a class="download" href="{{ url_for('download', upload_id=datasheet_id) }}" download="" rel="noopener">
+                                    <img src="/static/images/icons/download-icon.png" alt="download" loading="lazy">Download
+                                </a>
+                                {% endif %}
                             {% else %}
-                            <a class="view" href="/show/{{x.datasheet}}" target="_blank">
-                                <img src="/static/images/icons/view-icon.png" alt="view" loading="lazy">View
-                            </a>
-                            <a class="download" href="/download/{{x.datasheet}}" download="">
-                                <img src="/static/images/icons/download-icon.png" alt="download" loading="lazy">Download
-                            </a>
+                                <span class="unavailable">
+                                    {% if x.lang == 'ar' %}لا يتوفر ملف حالياً{% else %}Datasheet unavailable{% endif %}
+                                </span>
                             {% endif %}
                         </div>
                     </div>

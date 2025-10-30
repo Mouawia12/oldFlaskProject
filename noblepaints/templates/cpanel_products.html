@@ -89,7 +89,16 @@
                               </span>
                             </td>
                             <td><span class="fw-normal">{{x.desc|safe}}</span></td>    
-                            <td><span class="fw-normal"><a href="/download/{{x.datasheet}}" target="_blank">الرابط</a></span></td>                        
+                            {% set datasheet_id = (x.datasheet | int) if x.datasheet else 0 %}
+                            <td>
+                                <span class="fw-normal">
+                                    {% if datasheet_id > 0 %}
+                                    <a href="{{ url_for('download', upload_id=datasheet_id) }}" target="_blank" rel="noopener">الرابط</a>
+                                    {% else %}
+                                    <span class="text-muted">لا يوجد</span>
+                                    {% endif %}
+                                </span>
+                            </td>                        
                             <td><span class="fw-normal">{{x.category}}</span></td> 
                             <td><span class="fw-normal">{{x.country}}</span></td>   
                             <td>
