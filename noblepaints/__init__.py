@@ -18,13 +18,15 @@ app = Flask(
     static_folder=STATIC_DIR,
 )
 
-# Core configuration tuned for production defaults
-app.config.setdefault("SQLALCHEMY_DATABASE_URI", "sqlite:///noblepaints.db")
-app.config.setdefault("SQLALCHEMY_TRACK_MODIFICATIONS", False)
-app.config.setdefault("SECRET_KEY", "526af4fbd93bc393a6392db7")
-app.config.setdefault("PERMANENT_SESSION_LIFETIME", timedelta(days=7))
-app.config.setdefault("DEBUG", False)
-app.config.setdefault("ENV", "production")
+# Core configuration tuned for production defaults (do not leave unset/None)
+if not app.config.get("SQLALCHEMY_DATABASE_URI"):
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///noblepaints.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+if not app.config.get("SECRET_KEY"):
+    app.config["SECRET_KEY"] = "526af4fbd93bc393a6392db7"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+app.config["DEBUG"] = False
+app.config["ENV"] = "production"
 app.config.setdefault("PREFERRED_URL_SCHEME", "https")
 
 # Mail configuration
