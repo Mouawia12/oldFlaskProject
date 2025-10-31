@@ -20,3 +20,9 @@ noblepaints/noblepaints.db
 dist/
 build/
 .cache/
+
+# Allow control panel vendor distributions to be versioned
+!noblepaints/static/cpanel2/vendor/
+!noblepaints/static/cpanel2/vendor/**/
+!noblepaints/static/cpanel2/vendor/**/dist/
+!noblepaints/static/cpanel2/vendor/**/dist/**
